@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-char* createDnsHeader(const char* header_items);
+unsigned char* createDnsHeader(const char* header_items);
 
 int main() {
 	// Disable output buffering
@@ -64,7 +64,7 @@ int main() {
        unsigned char* response = createDnsHeader("Base DNS Header");
    
        // Send response
-       if (sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
+       if (sendto(udpSocket, response, 12, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
            perror("Failed to send response");
        }
    }
@@ -74,7 +74,7 @@ int main() {
     return 0;
 }
 
-char* createDnsHeader(const char* header_items) {
+unsigned char* createDnsHeader(const char* header_items) {
 
 	static unsigned char response[12] = {
         0x04, 0xd2, // ID = 1234
