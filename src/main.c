@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+char* createDnsHeader(const char* header_items);
+
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -16,7 +18,7 @@ int main() {
     printf("Logs from your program will appear here!\n");
 
     // Uncomment this block to pass the first stage
- int udpSocket, client_addr_len;
+    int udpSocket, client_addr_len;
 	struct sockaddr_in clientAddress;
 	
 	udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -59,7 +61,7 @@ int main() {
        printf("Received %d bytes: %s\n", bytesRead, buffer);
    
        // Create an empty response
-       char response[1] = { '\0' };
+       unsigned char* response = createDnsHeader("Base DNS Header");
    
        // Send response
        if (sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
@@ -72,3 +74,21 @@ int main() {
     return 0;
 }
 
+char* createDnsHeader(const char* header_items) {
+
+	static unsigned char response[12] = {
+        0x04, 0xd2, // ID = 1234
+        0x80, 0x00, // Flags = QR=1, rest 0
+        0x00, 0x00, // QDCOUNT = 0
+        0x00, 0x00, // ANCOUNT =0
+        0X00, 0X00, // NSCOUNT = 0
+        0X00, 0X00  // ARCOUNT = 0
+    };
+
+    if (header_items == NULL) {
+        // Handle allocation failure
+        return response;
+    }
+
+    return response;
+}
