@@ -61,10 +61,31 @@ int main() {
        printf("Received %d bytes: %s\n", bytesRead, buffer);
    
        // Create an empty response
-       unsigned char* response = createDnsHeader("Base DNS Header");
+    //    unsigned char* response = createDnsHeader("Base DNS Header");
+
+		unsigned char response[33] = {
+			0x04, 0xd2, // ID = 1234
+			0x80, 0x00, // Flags = QR=1, rest 0
+			0x00, 0x01, // QDCOUNT = 1
+			0x00, 0x00, // ANCOUNT =0
+			0x00, 0x00, // NSCOUNT = 0
+			0x00, 0x00, // ARCOUNT = 0
+			0x0c, 
+			0x63, 0x6f, 
+			0x64, 0x65, 
+			0x63, 0x72, 
+			0x61, 0x66, 
+			0x74, 0x65, 
+			0x72, 0x73, 
+			0x02, 0x69, 
+			0x6f,
+			0x00,
+			0x00, 0x01, // A
+			0x00, 0x01  // IN
+		};
    
        // Send response
-       if (sendto(udpSocket, response, 12, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
+       if (sendto(udpSocket, response, 33, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
            perror("Failed to send response");
        }
    }
