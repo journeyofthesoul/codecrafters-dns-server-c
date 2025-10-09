@@ -102,8 +102,8 @@ unsigned char* createDnsHeader(const char* header_items) {
         0x80, 0x00, // Flags = QR=1, rest 0
         0x00, 0x00, // QDCOUNT = 0
         0x00, 0x00, // ANCOUNT =0
-        0X00, 0X00, // NSCOUNT = 0
-        0X00, 0X00  // ARCOUNT = 0
+        0x00, 0x00, // NSCOUNT = 0
+        0x00, 0x00  // ARCOUNT = 0
     };
 
     if (header_items == NULL) {
