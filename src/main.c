@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 unsigned char* createDnsHeader(const char* header_items);
+void print_hex_array(const unsigned char *data, size_t length);
 
 int main() {
 	// Disable output buffering
@@ -59,12 +60,13 @@ int main() {
    
        buffer[bytesRead] = '\0';
        printf("Received %d bytes: %s\n", bytesRead, buffer);
+	   print_hex_array(buffer, sizeof(buffer));
    
        // Create an empty response
     //    unsigned char* response = createDnsHeader("Base DNS Header");
 
 		unsigned char response[64] = {
-			0x04, 0xd2, // ID = 1234
+			buffer[0], buffer[1], // ID = 1234
 			0x80, 0x00, // Flags = QR=1, rest 0
 			0x00, 0x01, // QDCOUNT = 1
 			0x00, 0x01, // ANCOUNT =1
@@ -135,6 +137,18 @@ unsigned char* createDnsHeader(const char* header_items) {
     }
 
     return response;
+}
+
+// Function to print bytes in hex format
+void print_hex_array(const unsigned char *data, size_t length) {
+    printf("uint8_t data[%zu] = { ", length);
+    for (size_t i = 0; i < length; i++) {
+        printf("0x%02X", data[i]);
+        if (i < length - 1) {
+            printf(", ");
+        }
+    }
+    printf(" };\n");
 }
 
 
