@@ -67,7 +67,7 @@ int main() {
 
 		unsigned char response[64] = {
 			buffer[0], buffer[1], // ID = 1234
-			0x80, 0x00, // Flags = QR=1, rest 0
+			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
 			0x00, 0x01, // QDCOUNT = 1
 			0x00, 0x01, // ANCOUNT =1
 			0x00, 0x00, // NSCOUNT = 0
