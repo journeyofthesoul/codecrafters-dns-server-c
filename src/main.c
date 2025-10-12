@@ -9,6 +9,7 @@
 
 unsigned char* createDnsHeader(const char* header_items);
 void print_hex_array(const unsigned char *data, size_t length);
+unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
 
 int main() {
 	// Disable output buffering
@@ -50,28 +51,37 @@ int main() {
    char buffer[512];
    socklen_t clientAddrLen = sizeof(clientAddress);
    
+   int domainIndex = 12;
    while (1) {
-       // Receive data
-       bytesRead = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
-       if (bytesRead == -1) {
-           perror("Error receiving data");
-           break;
-       }
+        // Receive data
+        bytesRead = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
+        if (bytesRead == -1) {
+            perror("Error receiving data");
+            break;
+        }
    
-       buffer[bytesRead] = '\0';
-       printf("Received %d bytes: %s\n", bytesRead, buffer);
-	   print_hex_array(buffer, sizeof(buffer));
+        buffer[bytesRead] = '\0';
+        printf("Received %d bytes: %s\n", bytesRead, buffer);
+	    print_hex_array(buffer, sizeof(buffer));
+
+		for (int i = 13; buffer[i] != '\0'; i++, domainIndex++) {
+        	printf("0x%02X\n", (unsigned char*)buffer[i]);
+    	}
    
        // Create an empty response
     //    unsigned char* response = createDnsHeader("Base DNS Header");
-
-		unsigned char response[64] = {
+	    unsigned char dnsHeaders[] = {
 			buffer[0], buffer[1], // ID = 1234
 			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
 			0x00, 0x01, // QDCOUNT = 1
 			0x00, 0x01, // ANCOUNT =1
 			0x00, 0x00, // NSCOUNT = 0
 			0x00, 0x00, // ARCOUNT = 0
+		};
+        int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
+		printf("Sizeof DNS Headers %d bytes\n", sizeDnsHeaders);
+
+		unsigned char dnsQuestion[] = {
 			0x0c, 
 			0x63, 0x6f, 
 			0x64, 0x65, 
@@ -84,6 +94,11 @@ int main() {
 			0x00,
 			0x00, 0x01, // A
 			0x00, 0x01,  // IN
+		};
+        int sizeDnsQuestion = sizeof(dnsQuestion) / sizeof(dnsQuestion[0]);
+		printf("Sizeof DNS Question %d bytes\n", sizeDnsQuestion);
+
+		unsigned char dnsAnswer[] = {
 			0x0c, 
 			0x63, 0x6f, 
 			0x64, 0x65, 
@@ -102,12 +117,56 @@ int main() {
 			0x08, 0x08,
 			0x08, 0x08
 		};
+        int sizeDnsAnswer = sizeof(dnsAnswer) / sizeof(dnsAnswer[0]);
+		printf("Sizeof DNS Answer %d bytes\n", sizeDnsAnswer);
+
+		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
+
+		unsigned char* response = concatenateArrays(responseTmp, sizeDnsHeaders + sizeDnsQuestion, dnsAnswer, sizeDnsAnswer);
+
+		// unsigned char response[64] = {
+		// 	buffer[0], buffer[1], // ID = 1234
+		// 	buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
+		// 	0x00, 0x01, // QDCOUNT = 1
+		// 	0x00, 0x01, // ANCOUNT =1
+		// 	0x00, 0x00, // NSCOUNT = 0
+		// 	0x00, 0x00, // ARCOUNT = 0
+		// 	0x0c, 
+		// 	0x63, 0x6f, 
+		// 	0x64, 0x65, 
+		// 	0x63, 0x72, 
+		// 	0x61, 0x66, 
+		// 	0x74, 0x65, 
+		// 	0x72, 0x73, 
+		// 	0x02, 0x69, 
+		// 	0x6f,
+		// 	0x00,
+		// 	0x00, 0x01, // A
+		// 	0x00, 0x01,  // IN
+		// 	0x0c, 
+		// 	0x63, 0x6f, 
+		// 	0x64, 0x65, 
+		// 	0x63, 0x72, 
+		// 	0x61, 0x66, 
+		// 	0x74, 0x65, 
+		// 	0x72, 0x73, 
+		// 	0x02, 0x69, 
+		// 	0x6f,
+		// 	0x00,
+		// 	0x00, 0x01, // A
+		// 	0x00, 0x01,  // IN
+		// 	0x00, 0x00,
+		// 	0x0b, 0xb8, // TTL = 3000
+		// 	0x00, 0x04, // RDLENGTH = 4
+		// 	0x08, 0x08,
+		// 	0x08, 0x08
+		// };
    
        // Send response
-	   int arraySize = sizeof(response) / sizeof(response[0]);
+	   int responseSize = sizeDnsHeaders + sizeDnsQuestion + sizeDnsAnswer;
 
 		printf("Hexadecimal values of characters:\n");
-		for (int i = 0; i < arraySize; i++) {
+		for (int i = 0; i < responseSize; i++) {
 			printf("0x%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
 		}
        if (sendto(udpSocket, response, 64, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
@@ -151,14 +210,37 @@ void print_hex_array(const unsigned char *data, size_t length) {
     printf(" };\n");
 }
 
+// Function to concatenate two unsigned char arrays
+unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2) {
+    // Calculate the total size of the new array
+    int totalSize = size1 + size2;
+
+    // Allocate memory for the new array
+    unsigned char* newArray = (unsigned char*)malloc(totalSize * sizeof(unsigned char));
+
+    // Check if memory allocation was successful
+    if (newArray == NULL) {
+        perror("Memory allocation failed");
+        return NULL;
+    }
+
+    // Copy elements from the first array
+    memcpy(newArray, arr1, size1 * sizeof(unsigned char));
+
+    // Copy elements from the second array, starting after the first array's elements
+    memcpy(newArray + size1, arr2, size2 * sizeof(unsigned char));
+
+    return newArray;
+}
+
 
 // Backup
 
-// unsigned char response[33] = {
-// 			0x04, 0xd2, // ID = 1234
-// 			0x80, 0x00, // Flags = QR=1, rest 0
+// unsigned char response[64] = {
+// 			buffer[0], buffer[1], // ID = 1234
+// 			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
 // 			0x00, 0x01, // QDCOUNT = 1
-// 			0x00, 0x00, // ANCOUNT =0
+// 			0x00, 0x01, // ANCOUNT =1
 // 			0x00, 0x00, // NSCOUNT = 0
 // 			0x00, 0x00, // ARCOUNT = 0
 // 			0x0c, 
@@ -172,7 +254,24 @@ void print_hex_array(const unsigned char *data, size_t length) {
 // 			0x6f,
 // 			0x00,
 // 			0x00, 0x01, // A
-// 			0x00, 0x01  // IN
+// 			0x00, 0x01,  // IN
+// 			0x0c, 
+// 			0x63, 0x6f, 
+// 			0x64, 0x65, 
+// 			0x63, 0x72, 
+// 			0x61, 0x66, 
+// 			0x74, 0x65, 
+// 			0x72, 0x73, 
+// 			0x02, 0x69, 
+// 			0x6f,
+// 			0x00,
+// 			0x00, 0x01, // A
+// 			0x00, 0x01,  // IN
+// 			0x00, 0x00,
+// 			0x0b, 0xb8, // TTL = 3000
+// 			0x00, 0x04, // RDLENGTH = 4
+// 			0x08, 0x08,
+// 			0x08, 0x08
 // 		};
    
 //        // Send response
@@ -182,6 +281,6 @@ void print_hex_array(const unsigned char *data, size_t length) {
 // 		for (int i = 0; i < arraySize; i++) {
 // 			printf("0x%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
 // 		}
-//        if (sendto(udpSocket, response, 33, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
+//        if (sendto(udpSocket, response, 64, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
 //            perror("Failed to send response");
 //        }
