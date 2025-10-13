@@ -64,9 +64,15 @@ int main() {
         printf("Received %d bytes: %s\n", bytesRead, buffer);
 	    print_hex_array(buffer, sizeof(buffer));
 
-		for (int i = 13; buffer[i] != '\0'; i++, domainIndex++) {
-        	printf("0x%02X\n", (unsigned char*)buffer[i]);
+		for (; buffer[domainIndex] != '\0'; domainIndex++) {
+        	printf("0x%02X\n", (unsigned char*)buffer[domainIndex]);
     	}
+
+		int domainSize = domainIndex - 12 + 1;
+		unsigned char domain[domainSize];
+		memcpy(domain, buffer + 12, (domainSize) * sizeof(unsigned char));
+		printf("Printing Domain: \n");
+		print_hex_array(domain, sizeof(domain));
    
        // Create an empty response
     //    unsigned char* response = createDnsHeader("Base DNS Header");
@@ -81,34 +87,16 @@ int main() {
         int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
 		printf("Sizeof DNS Headers %d bytes\n", sizeDnsHeaders);
 
-		unsigned char dnsQuestion[] = {
-			0x0c, 
-			0x63, 0x6f, 
-			0x64, 0x65, 
-			0x63, 0x72, 
-			0x61, 0x66, 
-			0x74, 0x65, 
-			0x72, 0x73, 
-			0x02, 0x69, 
-			0x6f,
-			0x00,
+		unsigned char dnsQuestionSuffix[] = {
 			0x00, 0x01, // A
-			0x00, 0x01,  // IN
+			0x00, 0x01  // IN
 		};
-        int sizeDnsQuestion = sizeof(dnsQuestion) / sizeof(dnsQuestion[0]);
+		int sizeDnsQuestionSuffix = sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
+		unsigned char* dnsQuestion = concatenateArrays(domain, domainSize, dnsQuestionSuffix, sizeDnsQuestionSuffix);
+        int sizeDnsQuestion = domainSize + sizeDnsQuestionSuffix;
 		printf("Sizeof DNS Question %d bytes\n", sizeDnsQuestion);
 
-		unsigned char dnsAnswer[] = {
-			0x0c, 
-			0x63, 0x6f, 
-			0x64, 0x65, 
-			0x63, 0x72, 
-			0x61, 0x66, 
-			0x74, 0x65, 
-			0x72, 0x73, 
-			0x02, 0x69, 
-			0x6f,
-			0x00,
+		unsigned char dnsAnswerSuffix[] = {
 			0x00, 0x01, // A
 			0x00, 0x01,  // IN
 			0x00, 0x00,
@@ -117,7 +105,9 @@ int main() {
 			0x08, 0x08,
 			0x08, 0x08
 		};
-        int sizeDnsAnswer = sizeof(dnsAnswer) / sizeof(dnsAnswer[0]);
+        int sizeDnsAnswerSuffix = sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
+		unsigned char* dnsAnswer = concatenateArrays(domain, domainSize, dnsAnswerSuffix, sizeDnsQuestionSuffix);
+        int sizeDnsAnswer = domainSize + sizeDnsAnswerSuffix;
 		printf("Sizeof DNS Answer %d bytes\n", sizeDnsAnswer);
 
 		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
