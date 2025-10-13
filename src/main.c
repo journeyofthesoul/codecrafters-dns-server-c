@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 unsigned char* createDnsHeader(const char* header_items);
-void print_hex_array(const unsigned char *data, size_t length);
+void print_hex_array(const unsigned char *data, int length);
 unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
 
 int main() {
@@ -193,7 +193,7 @@ unsigned char* createDnsHeader(const char* header_items) {
 }
 
 // Function to print bytes in hex format
-void print_hex_array(const unsigned char *data, size_t length) {
+void print_hex_array(const unsigned char *data, int length) {
     printf("uint8_t data[%zu] = { ", length);
     for (size_t i = 0; i < length; i++) {
         printf("0x%02X", data[i]);
