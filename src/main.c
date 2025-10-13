@@ -65,7 +65,7 @@ int main() {
 	    print_hex_array(buffer, sizeof(buffer));
 
 		for (; buffer[domainIndex] != '\0'; domainIndex++) {
-        	printf("0x%02X\n", (unsigned char*)buffer[domainIndex]);
+        	printf("0x%02X\n", (unsigned char)buffer[domainIndex]);
     	}
 
 		int domainSize = domainIndex - 12 + 1;
@@ -95,6 +95,8 @@ int main() {
 		unsigned char* dnsQuestion = concatenateArrays(domain, domainSize, dnsQuestionSuffix, sizeDnsQuestionSuffix);
         int sizeDnsQuestion = domainSize + sizeDnsQuestionSuffix;
 		printf("Sizeof DNS Question %d bytes\n", sizeDnsQuestion);
+		printf("Printing Question: \n");
+		print_hex_array(dnsQuestion, sizeof(dnsQuestion));
 
 		unsigned char dnsAnswerSuffix[] = {
 			0x00, 0x01, // A
@@ -109,6 +111,8 @@ int main() {
 		unsigned char* dnsAnswer = concatenateArrays(domain, domainSize, dnsAnswerSuffix, sizeDnsQuestionSuffix);
         int sizeDnsAnswer = domainSize + sizeDnsAnswerSuffix;
 		printf("Sizeof DNS Answer %d bytes\n", sizeDnsAnswer);
+		printf("Printing Answer: \n");
+		print_hex_array(dnsAnswer, sizeof(dnsAnswer));
 
 		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
 
