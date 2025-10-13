@@ -158,8 +158,8 @@ int main() {
    
        // Send response
 	   int responseSize = sizeDnsHeaders + sizeDnsQuestion + sizeDnsAnswer;
-
-		printf("Hexadecimal values of characters:\n");
+		printf("Response Size is: %d\n", responseSize);
+		printf("Printing Response Hex values of characters:\n");
 		for (int i = 0; i < responseSize; i++) {
 			printf("0x%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
 		}
