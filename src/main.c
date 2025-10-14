@@ -12,47 +12,48 @@ void print_hex_array(const unsigned char *data, int length);
 unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
 
 int main() {
-	// Disable output buffering
-	setbuf(stdout, NULL);
- 	setbuf(stderr, NULL);
+    // Disable output buffering
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
 
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
+    // You can use print statements as follows for debugging, they'll be visible when running tests.
     printf("Logs from your program will appear here!\n");
 
     // Uncomment this block to pass the first stage
     int udpSocket, client_addr_len;
-	struct sockaddr_in clientAddress;
+    struct sockaddr_in clientAddress;
 	
-	udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-	if (udpSocket == -1) {
-		printf("Socket creation failed: %s...\n", strerror(errno));
-		return 1;
-	}
+    udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udpSocket == -1) {
+	    printf("Socket creation failed: %s...\n", strerror(errno));
+	    return 1;
+    }
 	
-	// Since the tester restarts your program quite often, setting REUSE_PORT
-	// ensures that we don't run into 'Address already in use' errors
-	int reuse = 1;
-	if (setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
-		printf("SO_REUSEPORT failed: %s \n", strerror(errno));
-		return 1;
-	}
+    // Since the tester restarts your program quite often, setting REUSE_PORT
+    // ensures that we don't run into 'Address already in use' errors
+    int reuse = 1;
+    if (setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
+	    printf("SO_REUSEPORT failed: %s \n", strerror(errno));
+	    return 1;
+    }
 	
-	struct sockaddr_in serv_addr = { .sin_family = AF_INET ,
-									 .sin_port = htons(2053),
-									 .sin_addr = { htonl(INADDR_ANY) },
-									};
+    struct sockaddr_in serv_addr = {
+        .sin_family = AF_INET ,
+        .sin_port = htons(2053),
+        .sin_addr = { htonl(INADDR_ANY) },
+    };
 	
-	if (bind(udpSocket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) != 0) {
-		printf("Bind failed: %s \n", strerror(errno));
-		return 1;
-	}
+    if (bind(udpSocket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) != 0) {
+        printf("Bind failed: %s \n", strerror(errno));
+        return 1;
+    }
 
-   int bytesRead;
-   char buffer[512];
-   socklen_t clientAddrLen = sizeof(clientAddress);
+    int bytesRead;
+    char buffer[512];
+    socklen_t clientAddrLen = sizeof(clientAddress);
    
-   int domainIndex = 12;
-   while (1) {
+    int domainIndex = 12;
+    while (1) {
         // Receive data
         bytesRead = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
         if (bytesRead == -1) {
@@ -64,8 +65,8 @@ int main() {
         printf("Received %d bytes: %s\n", bytesRead, buffer);
 	    print_hex_array(buffer, sizeof(buffer));
 
-		for (; buffer[domainIndex] != '\0'; domainIndex++) {
-        	printf("0x%02X\n", (unsigned char)buffer[domainIndex]);
+	    for (; buffer[domainIndex] != '\0'; domainIndex++) {
+            printf("0x%02X\n", (unsigned char)buffer[domainIndex]);
     	}
 
 		int domainSize = domainIndex - 12 + 1;
@@ -74,8 +75,8 @@ int main() {
 		printf("Printing Domain: \n");
 		print_hex_array(domain, sizeof(domain));
    
-       // Create an empty response
-    //    unsigned char* response = createDnsHeader("Base DNS Header");
+        // Create an empty response
+        // unsigned char* response = createDnsHeader("Base DNS Header");
 	    unsigned char dnsHeaders[] = {
 			buffer[0], buffer[1], // ID = 1234
 			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
@@ -87,7 +88,7 @@ int main() {
         int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
 		printf("Sizeof DNS Headers %d bytes\n", sizeDnsHeaders);
 
-		unsigned char dnsQuestionSuffix[] = {
+	    unsigned char dnsQuestionSuffix[] = {
 			0x00, 0x01, // A
 			0x00, 0x01  // IN
 		};
