@@ -48,11 +48,13 @@ int main() {
         return 1;
     }
 
-    int bytesRead;
+    int bytesRead, numberOfDomains;
     char buffer[512];
     socklen_t clientAddrLen = sizeof(clientAddress);
    
     int domainIndex = 12;
+	// Declare a double pointer to char (or unsigned char for raw bytes)
+	unsigned char **listOfDomains;
     while (1) {
         // Receive data
         bytesRead = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr*)&clientAddress, &clientAddrLen);
@@ -60,7 +62,68 @@ int main() {
             perror("Error receiving data");
             break;
         }
+
+		numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
+		listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
+		for (int i = 0; i < numberOfDomains; i++) {
+			printf("\nPrinting %dth Domain: \n", i);
+			for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
+				printf("%02X ", (unsigned char)buffer[domainIndex]);
+				if ((size == 0) && (cumulativeSize == 0)) {
+					size = (int)buffer[domainIndex];
+					cumulativeSize += size;
+					listOfDomains[i] = (unsigned char *)malloc((size + 1) * sizeof(unsigned char));
+					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+					j++;
+				} else if (size == 0) {
+					size = (int)buffer[domainIndex];
+					cumulativeSize += size;
+					listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
+					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+					j++;
+				} else {
+					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+					j++;
+					size--;
+				}
+
+				if (buffer[domainIndex + 1] == '\0') {
+					listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
+					listOfDomains[i][j] = '\0';
+					print_hex_array(listOfDomains[i], j + 1);
+				}
+			}
+			domainIndex += 4;
+		}
+
+		// // Allocate memory for each individual byte array
+		// for (int i = 0; i < num_arrays; i++) {
+		// 	list_of_byte_arrays[i] = (char *)malloc(array_size * sizeof(char));
+		// 	if (list_of_byte_arrays[i] == NULL) {
+		// 		perror("Failed to allocate memory for a byte array");
+		// 		// Clean up already allocated memory before exiting
+		// 		for (int j = 0; j < i; j++) {
+		// 			free(list_of_byte_arrays[j]);
+		// 		}
+		// 		free(list_of_byte_arrays);
+		// 		return 1;
+		// 	}
+		// 	// Initialize or populate the byte array (example)
+		// 	memset(list_of_byte_arrays[i], (char)('A' + i), array_size);
+		// }
+
+		// // Access and print the contents of the byte arrays
+		// printf("Contents of the byte arrays:\n");
+		// for (int i = 0; i < num_arrays; i++) {
+		// 	printf("Array %d: ", i);
+		// 	for (size_t j = 0; j < array_size; j++) {
+		// 		printf("%02X ", (unsigned char)list_of_byte_arrays[i][j]); // Print as hex
+		// 	}
+		// 	printf("\n");
+		// }
    
+		domainIndex = 12;
+
         buffer[bytesRead] = '\0';
         printf("Received %d bytes: %s\n", bytesRead, buffer);
 	    print_hex_array(buffer, sizeof(buffer));
@@ -80,8 +143,8 @@ int main() {
 	    unsigned char dnsHeaders[] = {
 			buffer[0], buffer[1], // ID = 1234
 			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
-			0x00, 0x01, // QDCOUNT = 1
-			0x00, 0x01, // ANCOUNT =1
+			buffer[4], buffer[5], // QDCOUNT = 1
+			buffer[4], buffer[5], // ANCOUNT = 1
 			0x00, 0x00, // NSCOUNT = 0
 			0x00, 0x00, // ARCOUNT = 0
 		};
@@ -195,11 +258,11 @@ unsigned char* createDnsHeader(const char* header_items) {
 
 // Function to print bytes in hex format
 void print_hex_array(const unsigned char *data, int length) {
-    printf("uint8_t data[%zu] = { ", length);
+    printf("uint8_t data[%d] = { ", length);
     for (size_t i = 0; i < length; i++) {
-        printf("0x%02X", data[i]);
+        printf("%02X", data[i]);
         if (i < length - 1) {
-            printf(", ");
+            printf(" ");
         }
     }
     printf(" };\n");
