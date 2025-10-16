@@ -63,8 +63,13 @@ int main() {
             break;
         }
 
+		buffer[bytesRead] = '\0';
+        printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
+	    print_hex_array(buffer, sizeof(buffer));
+
 		numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
 		listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
+		int lengthsOfDomains[numberOfDomains];
 		for (int i = 0; i < numberOfDomains; i++) {
 			printf("\nPrinting %dth Domain: \n", i);
 			for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
@@ -72,13 +77,13 @@ int main() {
 				if ((size == 0) && (cumulativeSize == 0)) {
 					size = (int)buffer[domainIndex];
 					cumulativeSize += size;
-					listOfDomains[i] = (unsigned char *)malloc((size + 1) * sizeof(unsigned char));
+					listOfDomains[i] = (unsigned char *)malloc((500) * sizeof(unsigned char));
 					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
 					j++;
 				} else if (size == 0) {
 					size = (int)buffer[domainIndex];
 					cumulativeSize += size;
-					listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
+					// listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
 					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
 					j++;
 				} else {
@@ -88,55 +93,23 @@ int main() {
 				}
 
 				if (buffer[domainIndex + 1] == '\0') {
-					listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
+					// unsigned char *tempArray = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
+					// if (tempArray == NULL) {
+					// 	perror("Failed to reallocate memory");
+					// 	free(listOfDomains[i]); // Free the original memory block if reallocation fails
+					// 	return 1;
+					// }
+					// listOfDomains[i] = tempArray; 
+					lengthsOfDomains[i] = j + 1;
 					listOfDomains[i][j] = '\0';
+					printf("\nRecap %dth Domain: \n", i);
 					print_hex_array(listOfDomains[i], j + 1);
 				}
 			}
 			domainIndex += 4;
 		}
-
-		// // Allocate memory for each individual byte array
-		// for (int i = 0; i < num_arrays; i++) {
-		// 	list_of_byte_arrays[i] = (char *)malloc(array_size * sizeof(char));
-		// 	if (list_of_byte_arrays[i] == NULL) {
-		// 		perror("Failed to allocate memory for a byte array");
-		// 		// Clean up already allocated memory before exiting
-		// 		for (int j = 0; j < i; j++) {
-		// 			free(list_of_byte_arrays[j]);
-		// 		}
-		// 		free(list_of_byte_arrays);
-		// 		return 1;
-		// 	}
-		// 	// Initialize or populate the byte array (example)
-		// 	memset(list_of_byte_arrays[i], (char)('A' + i), array_size);
-		// }
-
-		// // Access and print the contents of the byte arrays
-		// printf("Contents of the byte arrays:\n");
-		// for (int i = 0; i < num_arrays; i++) {
-		// 	printf("Array %d: ", i);
-		// 	for (size_t j = 0; j < array_size; j++) {
-		// 		printf("%02X ", (unsigned char)list_of_byte_arrays[i][j]); // Print as hex
-		// 	}
-		// 	printf("\n");
-		// }
    
 		domainIndex = 12;
-
-        buffer[bytesRead] = '\0';
-        printf("Received %d bytes: %s\n", bytesRead, buffer);
-	    print_hex_array(buffer, sizeof(buffer));
-
-	    for (; buffer[domainIndex] != '\0'; domainIndex++) {
-            printf("0x%02X\n", (unsigned char)buffer[domainIndex]);
-    	}
-
-		int domainSize = domainIndex - 12 + 1;
-		unsigned char domain[domainSize];
-		memcpy(domain, buffer + 12, (domainSize) * sizeof(unsigned char));
-		printf("Printing Domain: \n");
-		print_hex_array(domain, sizeof(domain));
    
         // Create an empty response
         // unsigned char* response = createDnsHeader("Base DNS Header");
@@ -146,21 +119,32 @@ int main() {
 			buffer[4], buffer[5], // QDCOUNT = 1
 			buffer[4], buffer[5], // ANCOUNT = 1
 			0x00, 0x00, // NSCOUNT = 0
-			0x00, 0x00, // ARCOUNT = 0
+			0x00, 0x00 // ARCOUNT = 0
 		};
         int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
-		printf("Sizeof DNS Headers %d bytes\n", sizeDnsHeaders);
+		printf("\nSizeof DNS Headers %d bytes\n", sizeDnsHeaders);
+		printf("Printing DNS Headers: \n");
+		print_hex_array(dnsHeaders, sizeDnsHeaders);
 
 	    unsigned char dnsQuestionSuffix[] = {
 			0x00, 0x01, // A
 			0x00, 0x01  // IN
 		};
-		int sizeDnsQuestionSuffix = sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
-		unsigned char* dnsQuestion = concatenateArrays(domain, domainSize, dnsQuestionSuffix, sizeDnsQuestionSuffix);
-        int sizeDnsQuestion = domainSize + sizeDnsQuestionSuffix;
-		printf("Sizeof DNS Question %d bytes\n", sizeDnsQuestion);
+;
+		unsigned char* partialDnsQuestion = NULL;
+		unsigned char* dnsQuestion = NULL;
+		int cumulativeLength = 0;
+		for (int i = 0; i < numberOfDomains; i++) {
+			partialDnsQuestion = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsQuestionSuffix, sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
+			dnsQuestion = concatenateArrays(dnsQuestion, cumulativeLength, partialDnsQuestion, lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
+			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
+			free(partialDnsQuestion);
+		}
+
+        int sizeDnsQuestion = cumulativeLength;
+		printf("\nSizeof DNS Question %d bytes\n", sizeDnsQuestion);
 		printf("Printing Question: \n");
-		print_hex_array(dnsQuestion, sizeof(dnsQuestion));
+		print_hex_array(dnsQuestion, sizeDnsQuestion);
 
 		unsigned char dnsAnswerSuffix[] = {
 			0x00, 0x01, // A
@@ -171,16 +155,39 @@ int main() {
 			0x08, 0x08,
 			0x08, 0x08
 		};
-        int sizeDnsAnswerSuffix = sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
-		unsigned char* dnsAnswer = concatenateArrays(domain, domainSize, dnsAnswerSuffix, sizeDnsQuestionSuffix);
-        int sizeDnsAnswer = domainSize + sizeDnsAnswerSuffix;
-		printf("Sizeof DNS Answer %d bytes\n", sizeDnsAnswer);
+
+		unsigned char* partialDnsAnswer = NULL;
+		unsigned char* dnsAnswer = NULL;
+		cumulativeLength = 0;
+		for (int i = 0; i < numberOfDomains; i++) {
+			partialDnsAnswer = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsAnswerSuffix, sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
+			dnsAnswer = concatenateArrays(dnsAnswer, cumulativeLength, partialDnsAnswer, lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
+			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
+			free(partialDnsAnswer);
+		}
+
+        int sizeDnsAnswer = cumulativeLength;
+		printf("\nSizeof DNS Answer %d bytes\n", sizeDnsAnswer);
 		printf("Printing Answer: \n");
-		print_hex_array(dnsAnswer, sizeof(dnsAnswer));
+		print_hex_array(dnsAnswer, sizeDnsAnswer);
+
+		// Free each individual row (sub-array)
+		for (int i = 0; i < numberOfDomains; i++) {
+			free(listOfDomains[i]);
+			listOfDomains[i] = NULL; // Set pointer to NULL after freeing (good practice)
+		}
+
+		// Free the array of pointers itself
+		free(listOfDomains);
+		listOfDomains = NULL; // Set the main pointer to NULL
 
 		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
 
 		unsigned char* response = concatenateArrays(responseTmp, sizeDnsHeaders + sizeDnsQuestion, dnsAnswer, sizeDnsAnswer);
+		free(responseTmp);
+		free(dnsQuestion);
+		free(dnsAnswer);
+		free(listOfDomains);
 
 		// unsigned char response[64] = {
 		// 	buffer[0], buffer[1], // ID = 1234
@@ -222,44 +229,27 @@ int main() {
    
        // Send response
 	   int responseSize = sizeDnsHeaders + sizeDnsQuestion + sizeDnsAnswer;
-		printf("Response Size is: %d\n", responseSize);
+		printf("\nResponse Size is: %d\n", responseSize);
 		printf("Printing Response Hex values of characters:\n");
 		for (int i = 0; i < responseSize; i++) {
-			printf("0x%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
+			printf("%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
 		}
-       if (sendto(udpSocket, response, 64, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
+       if (sendto(udpSocket, response, responseSize, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
            perror("Failed to send response");
        }
-   }
+	   free(response);
+	}
    
-   close(udpSocket);
+    close(udpSocket);
 
     return 0;
 }
 
-unsigned char* createDnsHeader(const char* header_items) {
-
-	static unsigned char response[12] = {
-        0x04, 0xd2, // ID = 1234
-        0x80, 0x00, // Flags = QR=1, rest 0
-        0x00, 0x00, // QDCOUNT = 0
-        0x00, 0x00, // ANCOUNT =0
-        0x00, 0x00, // NSCOUNT = 0
-        0x00, 0x00  // ARCOUNT = 0
-    };
-
-    if (header_items == NULL) {
-        // Handle allocation failure
-        return response;
-    }
-
-    return response;
-}
 
 // Function to print bytes in hex format
 void print_hex_array(const unsigned char *data, int length) {
     printf("uint8_t data[%d] = { ", length);
-    for (size_t i = 0; i < length; i++) {
+    for (int i = 0; i < length; i++) {
         printf("%02X", data[i]);
         if (i < length - 1) {
             printf(" ");
@@ -337,7 +327,7 @@ unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const uns
 
 // 		printf("Hexadecimal values of characters:\n");
 // 		for (int i = 0; i < arraySize; i++) {
-// 			printf("0x%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
+// 			printf("%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
 // 		}
 //        if (sendto(udpSocket, response, 64, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
 //            perror("Failed to send response");
