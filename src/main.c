@@ -53,6 +53,7 @@ int main() {
     socklen_t clientAddrLen = sizeof(clientAddress);
    
     int domainIndex = 12;
+	int originalIndex = 0;
 	// Declare a double pointer to char (or unsigned char for raw bytes)
 	unsigned char **listOfDomains;
     while (1) {
@@ -63,6 +64,8 @@ int main() {
             break;
         }
 
+		domainIndex = 12; // Reset domainIndex for each new query
+		originalIndex = 0; // Reset originalIndex for each new query
 		buffer[bytesRead] = '\0';
         printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
 	    print_hex_array(buffer, sizeof(buffer));
@@ -73,6 +76,12 @@ int main() {
 		for (int i = 0; i < numberOfDomains; i++) {
 			printf("\nPrinting %dth Domain: \n", i);
 			for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
+				// printf("(%d)", domainIndex);
+				if((size == 0) && ((unsigned char)(buffer[domainIndex]) >> 6 == 0x03)) {
+					printf("\nMessage Compression Detected in DNS Query\n");
+					originalIndex = domainIndex + 2;
+					domainIndex = ((unsigned char)buffer[domainIndex] & 0x3F) * 256 + (unsigned char)buffer[domainIndex + 1];
+				}
 				printf("%02X ", (unsigned char)buffer[domainIndex]);
 				if ((size == 0) && (cumulativeSize == 0)) {
 					size = (int)buffer[domainIndex];
@@ -106,10 +115,12 @@ int main() {
 					print_hex_array(listOfDomains[i], j + 1);
 				}
 			}
-			domainIndex += 4;
+			if (domainIndex < originalIndex) {
+				domainIndex = originalIndex;
+			} else {
+				domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
+			}
 		}
-   
-		domainIndex = 12;
    
         // Create an empty response
         // unsigned char* response = createDnsHeader("Base DNS Header");
