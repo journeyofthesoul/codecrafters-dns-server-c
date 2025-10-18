@@ -150,6 +150,7 @@ int main() {
 			dnsQuestion = concatenateArrays(dnsQuestion, cumulativeLength, partialDnsQuestion, lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
 			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
 			free(partialDnsQuestion);
+			partialDnsQuestion = NULL;
 		}
 
         int sizeDnsQuestion = cumulativeLength;
@@ -175,6 +176,7 @@ int main() {
 			dnsAnswer = concatenateArrays(dnsAnswer, cumulativeLength, partialDnsAnswer, lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
 			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
 			free(partialDnsAnswer);
+			partialDnsAnswer = NULL;
 		}
 
         int sizeDnsAnswer = cumulativeLength;
@@ -196,9 +198,13 @@ int main() {
 
 		unsigned char* response = concatenateArrays(responseTmp, sizeDnsHeaders + sizeDnsQuestion, dnsAnswer, sizeDnsAnswer);
 		free(responseTmp);
+		responseTmp = NULL;
 		free(dnsQuestion);
+		dnsQuestion = NULL;
 		free(dnsAnswer);
+		dnsAnswer = NULL;
 		free(listOfDomains);
+		listOfDomains = NULL;
 
 		// unsigned char response[64] = {
 		// 	buffer[0], buffer[1], // ID = 1234
@@ -249,6 +255,7 @@ int main() {
            perror("Failed to send response");
        }
 	   free(response);
+	   response = NULL;
 	}
    
     close(udpSocket);
