@@ -6,20 +6,44 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 unsigned char* createDnsHeader(const char* header_items);
 void print_hex_array(const unsigned char *data, int length);
 unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
 
-int main() {
+int main(int argc, char *argv[]) {
     // Disable output buffering
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    printf("Logs from your program will appear here!\n");
+    printf("Upstream DNS Server details: %s\n", argv[2]);
 
-    // Uncomment this block to pass the first stage
+	char *colon_pos;
+    char ip_str[16]; // Sufficient for IPv4 (e.g., "255.255.255.255" + null terminator)
+    int upstreamDnsPort;
+
+    colon_pos = strchr(argv[2], ':');
+    if (colon_pos == NULL) {
+        printf("Error: Invalid format, no colon found.\n");
+        return 1;
+    }
+
+    // Extract IP address
+    int ip_len = colon_pos - argv[2];
+    if (ip_len >= sizeof(ip_str)) {
+        printf("Error: IP address too long.\n");
+        return 1;
+    }
+    strncpy(ip_str, argv[2], ip_len);
+    ip_str[ip_len] = '\0'; // Null-terminate the string
+
+    // Extract and convert port
+    upstreamDnsPort = atoi(colon_pos + 1); // +1 to start after the colon
+
+    printf("IP Address: %s\n", ip_str);
+    printf("Port: %d\n", upstreamDnsPort);
+
     int udpSocket, client_addr_len;
     struct sockaddr_in clientAddress;
 	
@@ -64,198 +88,226 @@ int main() {
             break;
         }
 
-		domainIndex = 12; // Reset domainIndex for each new query
-		originalIndex = 0; // Reset originalIndex for each new query
-		buffer[bytesRead] = '\0';
-        printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
-	    print_hex_array(buffer, sizeof(buffer));
+		struct sockaddr_in upstreamDnsAddr;
+        // Forward DNS query to upstream DNS server
+        memset(&upstreamDnsAddr, 0, sizeof(upstreamDnsAddr));
+        upstreamDnsAddr.sin_family = AF_INET;
+        upstreamDnsAddr.sin_port = htons(upstreamDnsPort);
+        inet_pton(AF_INET, ip_str, &upstreamDnsAddr.sin_addr);
 
-		numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
-		listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
-		int lengthsOfDomains[numberOfDomains];
-		for (int i = 0; i < numberOfDomains; i++) {
-			printf("\nPrinting %dth Domain: \n", i);
-			for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
-				// printf("(%d)", domainIndex);
-				if((size == 0) && ((unsigned char)(buffer[domainIndex]) >> 6 == 0x03)) {
-					printf("\nMessage Compression Detected in DNS Query\n");
-					originalIndex = domainIndex + 2;
-					domainIndex = ((unsigned char)buffer[domainIndex] & 0x3F) * 256 + (unsigned char)buffer[domainIndex + 1];
-				}
-				printf("%02X ", (unsigned char)buffer[domainIndex]);
-				if ((size == 0) && (cumulativeSize == 0)) {
-					size = (int)buffer[domainIndex];
-					cumulativeSize += size;
-					listOfDomains[i] = (unsigned char *)malloc((500) * sizeof(unsigned char));
-					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-					j++;
-				} else if (size == 0) {
-					size = (int)buffer[domainIndex];
-					cumulativeSize += size;
-					// listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
-					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-					j++;
-				} else {
-					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-					j++;
-					size--;
-				}
+        if (sendto(udpSocket, buffer, bytesRead, 0,
+                   (struct sockaddr*)&upstreamDnsAddr, sizeof(upstreamDnsAddr)) < 0) {
+            perror("sendto DNS server failed");
+            continue;
+        }
 
-				if (buffer[domainIndex + 1] == '\0') {
-					// unsigned char *tempArray = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
-					// if (tempArray == NULL) {
-					// 	perror("Failed to reallocate memory");
-					// 	free(listOfDomains[i]); // Free the original memory block if reallocation fails
-					// 	return 1;
-					// }
-					// listOfDomains[i] = tempArray; 
-					lengthsOfDomains[i] = j + 1;
-					listOfDomains[i][j] = '\0';
-					printf("\nRecap %dth Domain: \n", i);
-					print_hex_array(listOfDomains[i], j + 1);
-				}
-			}
-			if (domainIndex < originalIndex) {
-				domainIndex = originalIndex;
-			} else {
-				domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
-			}
-		}
+        // Receive DNS response from upstream server
+        ssize_t r = recvfrom(udpSocket, buffer, 512, 0, NULL, NULL);
+        if (r < 0) {
+            perror("recvfrom DNS server failed");
+            continue;
+        }
+
+        // Send DNS response back to original client
+        if (sendto(udpSocket, buffer, r, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) < 0) {
+            perror("sendto client failed");
+            continue;
+        }
+
+        printf("Forwarded DNS query and response.\n");
+
+// 		domainIndex = 12; // Reset domainIndex for each new query
+// 		originalIndex = 0; // Reset originalIndex for each new query
+// 		buffer[bytesRead] = '\0';
+//         printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
+// 	    print_hex_array(buffer, sizeof(buffer));
+
+// 		numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
+// 		listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
+// 		int lengthsOfDomains[numberOfDomains];
+// 		for (int i = 0; i < numberOfDomains; i++) {
+// 			printf("\nPrinting %dth Domain: \n", i);
+// 			for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
+// 				// printf("(%d)", domainIndex);
+// 				if((size == 0) && ((unsigned char)(buffer[domainIndex]) >> 6 == 0x03)) {
+// 					printf("\nMessage Compression Detected in DNS Query\n");
+// 					originalIndex = domainIndex + 2;
+// 					domainIndex = ((unsigned char)buffer[domainIndex] & 0x3F) * 256 + (unsigned char)buffer[domainIndex + 1];
+// 				}
+// 				printf("%02X ", (unsigned char)buffer[domainIndex]);
+// 				if ((size == 0) && (cumulativeSize == 0)) {
+// 					size = (int)buffer[domainIndex];
+// 					cumulativeSize += size;
+// 					listOfDomains[i] = (unsigned char *)malloc((500) * sizeof(unsigned char));
+// 					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+// 					j++;
+// 				} else if (size == 0) {
+// 					size = (int)buffer[domainIndex];
+// 					cumulativeSize += size;
+// 					// listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
+// 					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+// 					j++;
+// 				} else {
+// 					listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
+// 					j++;
+// 					size--;
+// 				}
+
+// 				if (buffer[domainIndex + 1] == '\0') {
+// 					// unsigned char *tempArray = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
+// 					// if (tempArray == NULL) {
+// 					// 	perror("Failed to reallocate memory");
+// 					// 	free(listOfDomains[i]); // Free the original memory block if reallocation fails
+// 					// 	return 1;
+// 					// }
+// 					// listOfDomains[i] = tempArray; 
+// 					lengthsOfDomains[i] = j + 1;
+// 					listOfDomains[i][j] = '\0';
+// 					printf("\nRecap %dth Domain: \n", i);
+// 					print_hex_array(listOfDomains[i], j + 1);
+// 				}
+// 			}
+// 			if (domainIndex < originalIndex) {
+// 				domainIndex = originalIndex;
+// 			} else {
+// 				domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
+// 			}
+// 		}
    
-        // Create an empty response
-        // unsigned char* response = createDnsHeader("Base DNS Header");
-	    unsigned char dnsHeaders[] = {
-			buffer[0], buffer[1], // ID = 1234
-			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
-			buffer[4], buffer[5], // QDCOUNT = 1
-			buffer[4], buffer[5], // ANCOUNT = 1
-			0x00, 0x00, // NSCOUNT = 0
-			0x00, 0x00 // ARCOUNT = 0
-		};
-        int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
-		printf("\nSizeof DNS Headers %d bytes\n", sizeDnsHeaders);
-		printf("Printing DNS Headers: \n");
-		print_hex_array(dnsHeaders, sizeDnsHeaders);
+//         // Create an empty response
+//         // unsigned char* response = createDnsHeader("Base DNS Header");
+// 	    unsigned char dnsHeaders[] = {
+// 			buffer[0], buffer[1], // ID = 1234
+// 			buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
+// 			buffer[4], buffer[5], // QDCOUNT = 1
+// 			buffer[4], buffer[5], // ANCOUNT = 1
+// 			0x00, 0x00, // NSCOUNT = 0
+// 			0x00, 0x00 // ARCOUNT = 0
+// 		};
+//         int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
+// 		printf("\nSizeof DNS Headers %d bytes\n", sizeDnsHeaders);
+// 		printf("Printing DNS Headers: \n");
+// 		print_hex_array(dnsHeaders, sizeDnsHeaders);
 
-	    unsigned char dnsQuestionSuffix[] = {
-			0x00, 0x01, // A
-			0x00, 0x01  // IN
-		};
-;
-		unsigned char* partialDnsQuestion = NULL;
-		unsigned char* dnsQuestion = NULL;
-		int cumulativeLength = 0;
-		for (int i = 0; i < numberOfDomains; i++) {
-			partialDnsQuestion = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsQuestionSuffix, sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
-			dnsQuestion = concatenateArrays(dnsQuestion, cumulativeLength, partialDnsQuestion, lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
-			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
-			free(partialDnsQuestion);
-			partialDnsQuestion = NULL;
-		}
+// 	    unsigned char dnsQuestionSuffix[] = {
+// 			0x00, 0x01, // A
+// 			0x00, 0x01  // IN
+// 		};
+// ;
+// 		unsigned char* partialDnsQuestion = NULL;
+// 		unsigned char* dnsQuestion = NULL;
+// 		int cumulativeLength = 0;
+// 		for (int i = 0; i < numberOfDomains; i++) {
+// 			partialDnsQuestion = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsQuestionSuffix, sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
+// 			dnsQuestion = concatenateArrays(dnsQuestion, cumulativeLength, partialDnsQuestion, lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
+// 			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
+// 			free(partialDnsQuestion);
+// 			partialDnsQuestion = NULL;
+// 		}
 
-        int sizeDnsQuestion = cumulativeLength;
-		printf("\nSizeof DNS Question %d bytes\n", sizeDnsQuestion);
-		printf("Printing Question: \n");
-		print_hex_array(dnsQuestion, sizeDnsQuestion);
+//         int sizeDnsQuestion = cumulativeLength;
+// 		printf("\nSizeof DNS Question %d bytes\n", sizeDnsQuestion);
+// 		printf("Printing Question: \n");
+// 		print_hex_array(dnsQuestion, sizeDnsQuestion);
 
-		unsigned char dnsAnswerSuffix[] = {
-			0x00, 0x01, // A
-			0x00, 0x01,  // IN
-			0x00, 0x00,
-			0x0b, 0xb8, // TTL = 3000
-			0x00, 0x04, // RDLENGTH = 4
-			0x08, 0x08,
-			0x08, 0x08
-		};
+// 		unsigned char dnsAnswerSuffix[] = {
+// 			0x00, 0x01, // A
+// 			0x00, 0x01,  // IN
+// 			0x00, 0x00,
+// 			0x0b, 0xb8, // TTL = 3000
+// 			0x00, 0x04, // RDLENGTH = 4
+// 			0x08, 0x08,
+// 			0x08, 0x08
+// 		};
 
-		unsigned char* partialDnsAnswer = NULL;
-		unsigned char* dnsAnswer = NULL;
-		cumulativeLength = 0;
-		for (int i = 0; i < numberOfDomains; i++) {
-			partialDnsAnswer = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsAnswerSuffix, sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
-			dnsAnswer = concatenateArrays(dnsAnswer, cumulativeLength, partialDnsAnswer, lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
-			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
-			free(partialDnsAnswer);
-			partialDnsAnswer = NULL;
-		}
+// 		unsigned char* partialDnsAnswer = NULL;
+// 		unsigned char* dnsAnswer = NULL;
+// 		cumulativeLength = 0;
+// 		for (int i = 0; i < numberOfDomains; i++) {
+// 			partialDnsAnswer = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsAnswerSuffix, sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
+// 			dnsAnswer = concatenateArrays(dnsAnswer, cumulativeLength, partialDnsAnswer, lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]));
+// 			cumulativeLength += lengthsOfDomains[i] + sizeof(dnsAnswerSuffix) / sizeof(dnsAnswerSuffix[0]);
+// 			free(partialDnsAnswer);
+// 			partialDnsAnswer = NULL;
+// 		}
 
-        int sizeDnsAnswer = cumulativeLength;
-		printf("\nSizeof DNS Answer %d bytes\n", sizeDnsAnswer);
-		printf("Printing Answer: \n");
-		print_hex_array(dnsAnswer, sizeDnsAnswer);
+//         int sizeDnsAnswer = cumulativeLength;
+// 		printf("\nSizeof DNS Answer %d bytes\n", sizeDnsAnswer);
+// 		printf("Printing Answer: \n");
+// 		print_hex_array(dnsAnswer, sizeDnsAnswer);
 
-		// Free each individual row (sub-array)
-		for (int i = 0; i < numberOfDomains; i++) {
-			free(listOfDomains[i]);
-			listOfDomains[i] = NULL; // Set pointer to NULL after freeing (good practice)
-		}
+// 		// Free each individual row (sub-array)
+// 		for (int i = 0; i < numberOfDomains; i++) {
+// 			free(listOfDomains[i]);
+// 			listOfDomains[i] = NULL; // Set pointer to NULL after freeing (good practice)
+// 		}
 
-		// Free the array of pointers itself
-		free(listOfDomains);
-		listOfDomains = NULL; // Set the main pointer to NULL
+// 		// Free the array of pointers itself
+// 		free(listOfDomains);
+// 		listOfDomains = NULL; // Set the main pointer to NULL
 
-		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
+// 		unsigned char* responseTmp = concatenateArrays(dnsHeaders, sizeDnsHeaders, dnsQuestion, sizeDnsQuestion);
 
-		unsigned char* response = concatenateArrays(responseTmp, sizeDnsHeaders + sizeDnsQuestion, dnsAnswer, sizeDnsAnswer);
-		free(responseTmp);
-		responseTmp = NULL;
-		free(dnsQuestion);
-		dnsQuestion = NULL;
-		free(dnsAnswer);
-		dnsAnswer = NULL;
-		free(listOfDomains);
-		listOfDomains = NULL;
+// 		unsigned char* response = concatenateArrays(responseTmp, sizeDnsHeaders + sizeDnsQuestion, dnsAnswer, sizeDnsAnswer);
+// 		free(responseTmp);
+// 		responseTmp = NULL;
+// 		free(dnsQuestion);
+// 		dnsQuestion = NULL;
+// 		free(dnsAnswer);
+// 		dnsAnswer = NULL;
+// 		free(listOfDomains);
+// 		listOfDomains = NULL;
 
-		// unsigned char response[64] = {
-		// 	buffer[0], buffer[1], // ID = 1234
-		// 	buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
-		// 	0x00, 0x01, // QDCOUNT = 1
-		// 	0x00, 0x01, // ANCOUNT =1
-		// 	0x00, 0x00, // NSCOUNT = 0
-		// 	0x00, 0x00, // ARCOUNT = 0
-		// 	0x0c, 
-		// 	0x63, 0x6f, 
-		// 	0x64, 0x65, 
-		// 	0x63, 0x72, 
-		// 	0x61, 0x66, 
-		// 	0x74, 0x65, 
-		// 	0x72, 0x73, 
-		// 	0x02, 0x69, 
-		// 	0x6f,
-		// 	0x00,
-		// 	0x00, 0x01, // A
-		// 	0x00, 0x01,  // IN
-		// 	0x0c, 
-		// 	0x63, 0x6f, 
-		// 	0x64, 0x65, 
-		// 	0x63, 0x72, 
-		// 	0x61, 0x66, 
-		// 	0x74, 0x65, 
-		// 	0x72, 0x73, 
-		// 	0x02, 0x69, 
-		// 	0x6f,
-		// 	0x00,
-		// 	0x00, 0x01, // A
-		// 	0x00, 0x01,  // IN
-		// 	0x00, 0x00,
-		// 	0x0b, 0xb8, // TTL = 3000
-		// 	0x00, 0x04, // RDLENGTH = 4
-		// 	0x08, 0x08,
-		// 	0x08, 0x08
-		// };
+// 		// unsigned char response[64] = {
+// 		// 	buffer[0], buffer[1], // ID = 1234
+// 		// 	buffer[2] | 0x80, (buffer[3] & 0xf0) + 0x04, // Flags = QR=1, rest 0
+// 		// 	0x00, 0x01, // QDCOUNT = 1
+// 		// 	0x00, 0x01, // ANCOUNT =1
+// 		// 	0x00, 0x00, // NSCOUNT = 0
+// 		// 	0x00, 0x00, // ARCOUNT = 0
+// 		// 	0x0c, 
+// 		// 	0x63, 0x6f, 
+// 		// 	0x64, 0x65, 
+// 		// 	0x63, 0x72, 
+// 		// 	0x61, 0x66, 
+// 		// 	0x74, 0x65, 
+// 		// 	0x72, 0x73, 
+// 		// 	0x02, 0x69, 
+// 		// 	0x6f,
+// 		// 	0x00,
+// 		// 	0x00, 0x01, // A
+// 		// 	0x00, 0x01,  // IN
+// 		// 	0x0c, 
+// 		// 	0x63, 0x6f, 
+// 		// 	0x64, 0x65, 
+// 		// 	0x63, 0x72, 
+// 		// 	0x61, 0x66, 
+// 		// 	0x74, 0x65, 
+// 		// 	0x72, 0x73, 
+// 		// 	0x02, 0x69, 
+// 		// 	0x6f,
+// 		// 	0x00,
+// 		// 	0x00, 0x01, // A
+// 		// 	0x00, 0x01,  // IN
+// 		// 	0x00, 0x00,
+// 		// 	0x0b, 0xb8, // TTL = 3000
+// 		// 	0x00, 0x04, // RDLENGTH = 4
+// 		// 	0x08, 0x08,
+// 		// 	0x08, 0x08
+// 		// };
    
-       // Send response
-	   int responseSize = sizeDnsHeaders + sizeDnsQuestion + sizeDnsAnswer;
-		printf("\nResponse Size is: %d\n", responseSize);
-		printf("Printing Response Hex values of characters:\n");
-		for (int i = 0; i < responseSize; i++) {
-			printf("%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
-		}
-       if (sendto(udpSocket, response, responseSize, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
-           perror("Failed to send response");
-       }
-	   free(response);
-	   response = NULL;
+//        // Send response
+// 	   int responseSize = sizeDnsHeaders + sizeDnsQuestion + sizeDnsAnswer;
+// 		printf("\nResponse Size is: %d\n", responseSize);
+// 		printf("Printing Response Hex values of characters:\n");
+// 		for (int i = 0; i < responseSize; i++) {
+// 			printf("%02X ", (unsigned char)response[i]); // Print each character as a 2-digit uppercase hex value
+// 		}
+//        if (sendto(udpSocket, response, responseSize, 0, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) == -1) {
+//            perror("Failed to send response");
+//        }
+// 	   free(response);
+// 	   response = NULL;
 	}
    
     close(udpSocket);
