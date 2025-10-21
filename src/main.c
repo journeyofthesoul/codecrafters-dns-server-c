@@ -9,7 +9,7 @@
 #include <arpa/inet.h>
 
 unsigned char* createDnsHeader(const char* header_items);
-void print_hex_array(const unsigned char *data, int length);
+void printHexArray(const unsigned char *data, int length);
 unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
 
 int main(int argc, char *argv[]) {
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
             originalIndex = 0; // Reset originalIndex for each new query
             buffer[bytesRead] = '\0';
             printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
-            print_hex_array(buffer, sizeof(buffer));
+            printHexArray(buffer, sizeof(buffer));
 
             numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
             listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
@@ -145,7 +145,7 @@ int main(int argc, char *argv[]) {
                         lengthsOfDomains[i] = j + 1;
                         listOfDomains[i][j] = '\0';
                         printf("\nRecap %dth Domain: \n", i);
-                        print_hex_array(listOfDomains[i], j + 1);
+                        printHexArray(listOfDomains[i], j + 1);
                     }
                 }
                 if (domainIndex < originalIndex) {
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
             int sizeDnsHeaders = sizeof(dnsHeaders) / sizeof(dnsHeaders[0]);
             printf("\nSizeof DNS Headers %d bytes\n", sizeDnsHeaders);
             printf("Printing DNS Headers: \n");
-            print_hex_array(dnsHeaders, sizeDnsHeaders);
+            printHexArray(dnsHeaders, sizeDnsHeaders);
 
             unsigned char dnsQuestionSuffix[] = {
                 0x00, 0x01, // A
@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
             int sizeDnsQuestion = cumulativeLength;
             printf("\nSizeof DNS Question %d bytes\n", sizeDnsQuestion);
             printf("Printing Question: \n");
-            print_hex_array(dnsQuestion, sizeDnsQuestion);
+            printHexArray(dnsQuestion, sizeDnsQuestion);
 
             unsigned char dnsAnswerSuffix[] = {
                 0x00, 0x01, // A
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
             int sizeDnsAnswer = cumulativeLength;
             printf("\nSizeof DNS Answer %d bytes\n", sizeDnsAnswer);
             printf("Printing Answer: \n");
-            print_hex_array(dnsAnswer, sizeDnsAnswer);
+            printHexArray(dnsAnswer, sizeDnsAnswer);
 
             // Free each individual row (sub-array)
             for (int i = 0; i < numberOfDomains; i++) {
@@ -265,7 +265,7 @@ int main(int argc, char *argv[]) {
             originalIndex = 0; // Reset originalIndex for each new query
             buffer[bytesRead] = '\0';
             printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
-            print_hex_array(buffer, sizeof(buffer));
+            printHexArray(buffer, sizeof(buffer));
 
             numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
             listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
@@ -309,7 +309,7 @@ int main(int argc, char *argv[]) {
                         lengthsOfDomains[i] = j + 1;
                         listOfDomains[i][j] = '\0';
                         printf("\nRecap %dth Domain: \n", i);
-                        print_hex_array(listOfDomains[i], j + 1);
+                        printHexArray(listOfDomains[i], j + 1);
                     }
                 }
                 if (domainIndex < originalIndex) {
@@ -359,7 +359,7 @@ int main(int argc, char *argv[]) {
                 sizeOfQuestions[i] = lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
 
                 printf("Printing DNS Headers to Upstream DNS Server\n");
-                print_hex_array(dnsHeaders, sizeDnsHeaders);
+                printHexArray(dnsHeaders, sizeDnsHeaders);
                 // Send DNS Query to Upstream Server and push to local variable
                 unsigned char* upstreamQuery = concatenateArrays(dnsHeaders, sizeDnsHeaders, listOfQuestions[i], sizeOfQuestions[i]);
                 if (sendto(udpSocket, upstreamQuery, sizeDnsHeaders + sizeOfQuestions[i], 0,
@@ -368,7 +368,7 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
                 printf("Printing Query to Upstream DNS Server\n");
-                print_hex_array(upstreamQuery, sizeDnsHeaders + sizeOfQuestions[i]);
+                printHexArray(upstreamQuery, sizeDnsHeaders + sizeOfQuestions[i]);
 
                 // Receive DNS response from upstream server
                 ssize_t r = recvfrom(udpSocket, upstreamBuffer, 512, 0, NULL, NULL);
@@ -378,14 +378,14 @@ int main(int argc, char *argv[]) {
                 }
                 upstreamBuffer[r] = '\0';
                 printf("Printing Response from Upstream DNS Server\n");
-                print_hex_array(upstreamBuffer, r);
+                printHexArray(upstreamBuffer, r);
 
                 // Parse DNS Answer from upstream server and store in local variable
                 listOfAnswers[i] = (unsigned char*)malloc((r - (sizeDnsHeaders + sizeOfQuestions[i])) * sizeof(unsigned char));
                 sizeOfAnswers[i] = r - (sizeDnsHeaders + sizeOfQuestions[i]);
                 memcpy(listOfAnswers[i], &upstreamBuffer[sizeDnsHeaders + sizeOfQuestions[i]], sizeOfAnswers[i] * sizeof(unsigned char));
                 printf("Printing Parsed Answer from the Upstream DNS Server\n");
-                print_hex_array(listOfAnswers[i], sizeOfAnswers[i]);
+                printHexArray(listOfAnswers[i], sizeOfAnswers[i]);
 
                 free(upstreamQuery);
                 upstreamQuery = NULL;
@@ -402,7 +402,7 @@ int main(int argc, char *argv[]) {
                 cumulativeSize += sizeOfQuestions[i];
             }
             // printf("Printing QuestionSet\n");
-            // print_hex_array(response, cumulativeSize);
+            // printHexArray(response, cumulativeSize);
 
             for (int i = 0; i < numberOfDomains; i++) {
                 unsigned char* responseTmp = concatenateArrays(response, cumulativeSize, listOfAnswers[i], sizeOfAnswers[i]);
@@ -411,7 +411,7 @@ int main(int argc, char *argv[]) {
                 cumulativeSize += sizeOfAnswers[i];
             }
             // printf("Printing AnswerSet\n");
-            // print_hex_array(response, cumulativeSize);
+            // printHexArray(response, cumulativeSize);
 
             // Set response headers
             response[2] = buffer[2] | 0x80;
@@ -463,7 +463,7 @@ int main(int argc, char *argv[]) {
 
 
 // Function to print bytes in hex format
-void print_hex_array(const unsigned char *data, int length) {
+void printHexArray(const unsigned char *data, int length) {
     printf("uint8_t data[%d] = { ", length);
     for (int i = 0; i < length; i++) {
         printf("%02X", data[i]);
