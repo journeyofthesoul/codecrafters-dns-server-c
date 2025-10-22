@@ -15,6 +15,8 @@ int main(int argc, char *argv[]) {
     setbuf(stderr, NULL);
 
     endpoint_t* endpoint = NULL;
+    struct sockaddr_in upstreamDnsAddr;
+    
     if ((argc == 3) && (strcmp(argv[1], "--resolver") == 0)) {
         endpoint = parseEndpoint(argv);
         if (endpoint == NULL) {
@@ -22,6 +24,12 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         printf("Using upstream DNS server at %s:%d\n", endpoint->address, endpoint->port);
+
+        // Forward DNS query to upstream DNS server
+        memset(&upstreamDnsAddr, 0, sizeof(upstreamDnsAddr));
+        upstreamDnsAddr.sin_family = AF_INET;
+        upstreamDnsAddr.sin_port = htons(endpoint->port);
+        inet_pton(AF_INET, endpoint->address, &upstreamDnsAddr.sin_addr);
     }
 
     int udpSocket, client_addr_len;
@@ -296,13 +304,6 @@ int main(int argc, char *argv[]) {
                     domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
                 }
             }
-
-            struct sockaddr_in upstreamDnsAddr;
-            // Forward DNS query to upstream DNS server
-            memset(&upstreamDnsAddr, 0, sizeof(upstreamDnsAddr));
-            upstreamDnsAddr.sin_family = AF_INET;
-            upstreamDnsAddr.sin_port = htons(endpoint->port);
-            inet_pton(AF_INET, endpoint->address, &upstreamDnsAddr.sin_addr);
 
             listOfAnswers = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
             listOfQuestions = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
