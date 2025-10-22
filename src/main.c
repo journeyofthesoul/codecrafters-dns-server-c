@@ -7,43 +7,21 @@
 #include <errno.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-
-unsigned char* createDnsHeader(const char* header_items);
-void printHexArray(const unsigned char *data, int length);
-unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2);
+#include "utils/utils.h"
 
 int main(int argc, char *argv[]) {
     // Disable output buffering
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
 
-    char *colon_pos;
-    char ip_str[16]; // Sufficient for IPv4 (e.g., "255.255.255.255" + null terminator)
-    int upstreamDnsPort;
-
+    endpoint_t* endpoint = NULL;
     if ((argc == 3) && (strcmp(argv[1], "--resolver") == 0)) {
-        printf("Upstream DNS Server details: %s\n", argv[2]);
-
-        colon_pos = strchr(argv[2], ':');
-        if (colon_pos == NULL) {
-            printf("Error: Invalid format, no colon found.\n");
+        endpoint = parseEndpoint(argv);
+        if (endpoint == NULL) {
+            printf("Failed to parse endpoint. Exiting.\n");
             return 1;
         }
-
-        // Extract IP address
-        int ip_len = colon_pos - argv[2];
-        if (ip_len >= sizeof(ip_str)) {
-            printf("Error: IP address too long.\n");
-            return 1;
-        }
-        strncpy(ip_str, argv[2], ip_len);
-        ip_str[ip_len] = '\0'; // Null-terminate the string
-
-        // Extract and convert port
-        upstreamDnsPort = atoi(colon_pos + 1); // +1 to start after the colon
-
-        printf("IP Address: %s\n", ip_str);
-        printf("Port: %d\n", upstreamDnsPort);
+        printf("Using upstream DNS server at %s:%d\n", endpoint->address, endpoint->port);
     }
 
     int udpSocket, client_addr_len;
@@ -323,8 +301,8 @@ int main(int argc, char *argv[]) {
             // Forward DNS query to upstream DNS server
             memset(&upstreamDnsAddr, 0, sizeof(upstreamDnsAddr));
             upstreamDnsAddr.sin_family = AF_INET;
-            upstreamDnsAddr.sin_port = htons(upstreamDnsPort);
-            inet_pton(AF_INET, ip_str, &upstreamDnsAddr.sin_addr);
+            upstreamDnsAddr.sin_port = htons(endpoint->port);
+            inet_pton(AF_INET, endpoint->address, &upstreamDnsAddr.sin_addr);
 
             listOfAnswers = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
             listOfQuestions = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
@@ -456,43 +434,10 @@ int main(int argc, char *argv[]) {
         }
 	}
    
+    if (endpoint != NULL)
+        free(endpoint);
+
     close(udpSocket);
 
     return 0;
-}
-
-
-// Function to print bytes in hex format
-void printHexArray(const unsigned char *data, int length) {
-    printf("uint8_t data[%d] = { ", length);
-    for (int i = 0; i < length; i++) {
-        printf("%02X", data[i]);
-        if (i < length - 1) {
-            printf(" ");
-        }
-    }
-    printf(" };\n");
-}
-
-// Function to concatenate two unsigned char arrays
-unsigned char* concatenateArrays(const unsigned char* arr1, int size1, const unsigned char* arr2, int size2) {
-    // Calculate the total size of the new array
-    int totalSize = size1 + size2;
-
-    // Allocate memory for the new array
-    unsigned char* newArray = (unsigned char*)malloc(totalSize * sizeof(unsigned char));
-
-    // Check if memory allocation was successful
-    if (newArray == NULL) {
-        perror("Memory allocation failed");
-        return NULL;
-    }
-
-    // Copy elements from the first array
-    memcpy(newArray, arr1, size1 * sizeof(unsigned char));
-
-    // Copy elements from the second array, starting after the first array's elements
-    memcpy(newArray + size1, arr2, size2 * sizeof(unsigned char));
-
-    return newArray;
 }
