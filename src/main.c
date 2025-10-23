@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include "utils/utils.h"
+#include "dns/dns.h"
 
 int main(int argc, char *argv[]) {
     // Disable output buffering
@@ -16,7 +17,7 @@ int main(int argc, char *argv[]) {
 
     endpoint_t* endpoint = NULL;
     struct sockaddr_in upstreamDnsAddr;
-    
+
     if ((argc == 3) && (strcmp(argv[1], "--resolver") == 0)) {
         endpoint = parseEndpoint(argv);
         if (endpoint == NULL) {
@@ -64,8 +65,6 @@ int main(int argc, char *argv[]) {
     char buffer[512];
     socklen_t clientAddrLen = sizeof(clientAddress);
    
-    int domainIndex = 12;
-	int originalIndex = 0;
 	// Declare a double pointer to char (or unsigned char for raw bytes)
 	unsigned char **listOfDomains;
     unsigned char **listOfQuestions;
@@ -83,63 +82,14 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
-            domainIndex = 12; // Reset domainIndex for each new query
-            originalIndex = 0; // Reset originalIndex for each new query
             buffer[bytesRead] = '\0';
             printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
             printHexArray(buffer, sizeof(buffer));
 
             numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
-            listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
             int lengthsOfDomains[numberOfDomains];
-            for (int i = 0; i < numberOfDomains; i++) {
-                printf("\nPrinting %dth Domain: \n", i);
-                for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
-                    // printf("(%d)", domainIndex);
-                    if((size == 0) && ((unsigned char)(buffer[domainIndex]) >> 6 == 0x03)) {
-                        printf("\nMessage Compression Detected in DNS Query\n");
-                        originalIndex = domainIndex + 2;
-                        domainIndex = ((unsigned char)buffer[domainIndex] & 0x3F) * 256 + (unsigned char)buffer[domainIndex + 1];
-                    }
-                    printf("%02X ", (unsigned char)buffer[domainIndex]);
-                    if ((size == 0) && (cumulativeSize == 0)) {
-                        size = (int)buffer[domainIndex];
-                        cumulativeSize += size;
-                        listOfDomains[i] = (unsigned char *)malloc((500) * sizeof(unsigned char));
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                    } else if (size == 0) {
-                        size = (int)buffer[domainIndex];
-                        cumulativeSize += size;
-                        // listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                    } else {
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                        size--;
-                    }
-
-                    if (buffer[domainIndex + 1] == '\0') {
-                        // unsigned char *tempArray = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
-                        // if (tempArray == NULL) {
-                        // 	perror("Failed to reallocate memory");
-                        // 	free(listOfDomains[i]); // Free the original memory block if reallocation fails
-                        // 	return 1;
-                        // }
-                        // listOfDomains[i] = tempArray; 
-                        lengthsOfDomains[i] = j + 1;
-                        listOfDomains[i][j] = '\0';
-                        printf("\nRecap %dth Domain: \n", i);
-                        printHexArray(listOfDomains[i], j + 1);
-                    }
-                }
-                if (domainIndex < originalIndex) {
-                    domainIndex = originalIndex;
-                } else {
-                    domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
-                }
-            }
+            listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
+            getDomainsFromQuery(buffer, numberOfDomains, listOfDomains, lengthsOfDomains);
     
             // Create an empty response
             // unsigned char* response = createDnsHeader("Base DNS Header");
@@ -247,63 +197,14 @@ int main(int argc, char *argv[]) {
                 break;
             }
 
-            domainIndex = 12; // Reset domainIndex for each new query
-            originalIndex = 0; // Reset originalIndex for each new query
             buffer[bytesRead] = '\0';
             printf("\n\nReceived %d bytes: %s\n", bytesRead, buffer);
             printHexArray(buffer, sizeof(buffer));
 
             numberOfDomains = (int)buffer[4] * 256 + (int)buffer[5];
-            listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
             int lengthsOfDomains[numberOfDomains];
-            for (int i = 0; i < numberOfDomains; i++) {
-                printf("\nPrinting %dth Domain: \n", i);
-                for (int size=0, cumulativeSize=0, j=0; buffer[domainIndex] != '\0'; domainIndex++) {
-                    // printf("(%d)", domainIndex);
-                    if((size == 0) && ((unsigned char)(buffer[domainIndex]) >> 6 == 0x03)) {
-                        printf("\nMessage Compression Detected in DNS Query\n");
-                        originalIndex = domainIndex + 2;
-                        domainIndex = ((unsigned char)buffer[domainIndex] & 0x3F) * 256 + (unsigned char)buffer[domainIndex + 1];
-                    }
-                    printf("%02X ", (unsigned char)buffer[domainIndex]);
-                    if ((size == 0) && (cumulativeSize == 0)) {
-                        size = (int)buffer[domainIndex];
-                        cumulativeSize += size;
-                        listOfDomains[i] = (unsigned char *)malloc((500) * sizeof(unsigned char));
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                    } else if (size == 0) {
-                        size = (int)buffer[domainIndex];
-                        cumulativeSize += size;
-                        // listOfDomains[i] = (unsigned char *)realloc(listOfDomains[i], (cumulativeSize + 1) * sizeof(unsigned char));
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                    } else {
-                        listOfDomains[i][j] = (unsigned char)buffer[domainIndex];
-                        j++;
-                        size--;
-                    }
-
-                    if (buffer[domainIndex + 1] == '\0') {
-                        // unsigned char *tempArray = (unsigned char *)realloc(listOfDomains[i], (j + 1) * sizeof(unsigned char));
-                        // if (tempArray == NULL) {
-                        // 	perror("Failed to reallocate memory");
-                        // 	free(listOfDomains[i]); // Free the original memory block if reallocation fails
-                        // 	return 1;
-                        // }
-                        // listOfDomains[i] = tempArray; 
-                        lengthsOfDomains[i] = j + 1;
-                        listOfDomains[i][j] = '\0';
-                        printf("\nRecap %dth Domain: \n", i);
-                        printHexArray(listOfDomains[i], j + 1);
-                    }
-                }
-                if (domainIndex < originalIndex) {
-                    domainIndex = originalIndex;
-                } else {
-                    domainIndex += 5; // Skip the null byte and QTYPE (2 bytes) and QCLASS (2 bytes)
-                }
-            }
+            listOfDomains = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
+            getDomainsFromQuery(buffer, numberOfDomains, listOfDomains, lengthsOfDomains);
 
             listOfAnswers = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
             listOfQuestions = (unsigned char **)malloc(numberOfDomains * sizeof(unsigned char *));
@@ -333,7 +234,7 @@ int main(int argc, char *argv[]) {
             unsigned char upstreamBuffer[512];
             for (int i = 0; i < numberOfDomains; i++) {
                 memset(upstreamBuffer, 0, sizeof(upstreamBuffer));
-
+                
                 listOfQuestions[i] = concatenateArrays(listOfDomains[i], lengthsOfDomains[i], dnsQuestionSuffix, sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]));
                 sizeOfQuestions[i] = lengthsOfDomains[i] + sizeof(dnsQuestionSuffix) / sizeof(dnsQuestionSuffix[0]);
 
