@@ -53,3 +53,6 @@ dkms.conf
 
 build
 vcpkg_installed
+
+# MacBook extra files
+.DS_Store
